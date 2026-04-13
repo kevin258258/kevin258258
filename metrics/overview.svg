@@ -1,0 +1,19 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="420" fill="#F7F8F9"/>
+  <rect x="34" y="34" width="1132" height="352" rx="18" fill="white" stroke="#111111" stroke-opacity="0.08"/>
+  <text x="72" y="96" fill="#111111" font-family="'Courier New', monospace" font-size="22" letter-spacing="2">METRICS POSTER / PLACEHOLDER</text>
+  <text x="72" y="132" fill="#4B5563" font-family="'Courier New', monospace" font-size="17">Run the workflow: GitHub-Metrics</text>
+  <text x="72" y="160" fill="#4B5563" font-family="'Courier New', monospace" font-size="17">Output path: metrics/overview.svg</text>
+  <rect x="72" y="214" width="232" height="114" rx="14" fill="#111111"/>
+  <text x="96" y="252" fill="#F9FAFB" font-family="'Courier New', monospace" font-size="16">LANGUAGES</text>
+  <text x="96" y="282" fill="#93C5FD" font-family="'Courier New', monospace" font-size="14">most-used / recent / skipped-filtered</text>
+  <rect x="328" y="214" width="232" height="114" rx="14" fill="#2563EB"/>
+  <text x="352" y="252" fill="#F9FAFB" font-family="'Courier New', monospace" font-size="16">HABITS</text>
+  <text x="352" y="282" fill="#DBEAFE" font-family="'Courier New', monospace" font-size="14">facts / charts / recent cadence</text>
+  <rect x="584" y="214" width="232" height="114" rx="14" fill="#111111"/>
+  <text x="608" y="252" fill="#F9FAFB" font-family="'Courier New', monospace" font-size="16">REPOSITORIES</text>
+  <text x="608" y="282" fill="#93C5FD" font-family="'Courier New', monospace" font-size="14">featured / selected / no coursework block</text>
+  <rect x="840" y="214" width="232" height="114" rx="14" fill="#2563EB"/>
+  <text x="864" y="252" fill="#F9FAFB" font-family="'Courier New', monospace" font-size="16">CALENDAR</text>
+  <text x="864" y="282" fill="#DBEAFE" font-family="'Courier New', monospace" font-size="14">isocalendar / half-year / live data</text>
+</svg>
