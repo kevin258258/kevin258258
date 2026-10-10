@@ -32,6 +32,9 @@ def animate(attr,values,dur):
 def generate(theme):
     fg = '#e6edf3' if theme == 'dark' else '#18212c'
     background='#0d1117' if theme=='dark' else '#ffffff'
+    grain_floor = '.25' if theme == 'dark' else '.55'
+    mid_opacity = '.75' if theme == 'dark' else '.9'
+    edge_opacity = '.3' if theme == 'dark' else '.7'
     # One shaded relief mask shares a single displacement field across every
     # face. This preserves depth alignment and avoids eight filter passes.
     masks = f'''<clipPath id="front-shell"><path d="{OUTER} {MOUTH}" fill-rule="evenodd" clip-rule="evenodd"/></clipPath>
@@ -64,10 +67,10 @@ def generate(theme):
 <filter id="grain" x="0" y="0" width="900" height="660" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 <feTurbulence type="fractalNoise" baseFrequency=".025 .04" numOctaves="2" seed="16" result="noise">{animate('baseFrequency','.025 .04;.038 .022;.025 .04',31.173)}</feTurbulence>
 <feColorMatrix in="noise" type="saturate" values="0"/>
-<feComponentTransfer result="grain"><feFuncR type="linear" slope=".8" intercept=".25"/><feFuncG type="linear" slope=".8" intercept=".25"/><feFuncB type="linear" slope=".8" intercept=".25"/><feFuncA type="linear" slope="0" intercept="1"/></feComponentTransfer>
+<feComponentTransfer result="grain"><feFuncR type="linear" slope=".8" intercept="{grain_floor}"/><feFuncG type="linear" slope=".8" intercept="{grain_floor}"/><feFuncB type="linear" slope=".8" intercept="{grain_floor}"/><feFuncA type="linear" slope="0" intercept="1"/></feComponentTransfer>
 <feComposite in="SourceGraphic" in2="grain" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>
 </filter>
-<linearGradient id="light" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{fg}" stop-opacity=".95"/><stop offset=".45" stop-color="{fg}" stop-opacity=".75"/><stop offset="1" stop-color="{fg}" stop-opacity=".3"/></linearGradient>
+<linearGradient id="light" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{fg}" stop-opacity=".95"/><stop offset=".45" stop-color="{fg}" stop-opacity="{mid_opacity}"/><stop offset="1" stop-color="{fg}" stop-opacity="{edge_opacity}"/></linearGradient>
 {plane}
 {masks}
 </defs>
