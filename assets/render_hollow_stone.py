@@ -1,170 +1,86 @@
-"""Render a continuously deforming ASCII stone with one persistent hole.
+"""Build the README's live, procedural ASCII stone (Python standard library only).
 
-Requires Pillow and NumPy. Run:
-    python assets/render_hollow_stone.py [--font /path/to/monospace.ttf]
+Run: python assets/render_hollow_stone.py
 
-The surface is a closed tube on a positive, star-shaped centerline. Each
-azimuth has a simple closed cross-section, so morphing never cuts, joins,
-or self-intersects the surface. All motion is periodic for a seamless loop.
+This writes a scene description, not video frames. The browser computes two
+Perlin-noise displacement fields plus a grain field with native SVG filters.
+Independent periods combine into evolving erosion and lighting. The solid
+has a thick faceted shell, a recessed mouth and a smaller opening at depth.
+Glyphs stay on an ASCII grid; only the masks and their shading are deformed.
+No JavaScript, raster images, external fonts or external services are used.
 """
 
-import argparse
-import math
-from functools import lru_cache
 from pathlib import Path
+import math
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-
-WIDTH, HEIGHT = 900, 660
-COLS, ROWS = 118, 60
-FRAMES, DURATION = 180, 70
-ROOT = Path(__file__).resolve().parent
-THEMES = {
-    "dark": ((13, 17, 23), (235, 239, 243)),
-    "light": ((255, 255, 255), (27, 32, 39)),
-}
-U = np.linspace(0, math.tau, 480, endpoint=False)[:, None]
-V = np.linspace(0, math.tau, 160, endpoint=False)[None, :]
-RAMP = np.array(list(".,:;-=+*#%@"))
-CELL_WIDTH, CELL_HEIGHT = 7, 10
+ROOT=Path(__file__).resolve().parent
+OUTER='M 281 98 L 429 72 L 569 117 L 642 213 L 659 346 L 608 481 L 488 549 L 351 525 L 243 415 L 222 273 L 246 171 Z'
+MOUTH='M 397 205 L 489 199 L 535 267 L 508 366 L 420 408 L 351 363 L 334 279 Z'
+DEEP='M 431 254 L 481 245 L 510 290 L 486 354 L 434 371 L 386 345 L 382 292 Z'
+TOP='M 281 98 L 429 72 L 569 117 L 642 213 L 489 199 L 397 205 L 246 171 Z'
+LEFT='M 246 171 L 397 205 L 334 279 L 351 363 L 351 525 L 243 415 L 222 273 Z'
+BOTTOM='M 351 363 L 420 408 L 508 366 L 608 481 L 488 549 L 351 525 Z'
+CAVE_LEFT='M 397 205 L 431 254 L 382 292 L 386 345 L 351 363 L 334 279 Z'
+CAVE_BOTTOM='M 351 363 L 386 345 L 434 371 L 486 354 L 508 366 L 420 408 Z'
 
 
-def surface(phase):
-    t = phase * math.tau
-    square = (1 + math.cos(t)) / 2
-    fluid = 1 - square
-    power = 2 + 6 * square
-    c, s = np.cos(U), np.sin(U)
-    radius = 1.65 / (np.abs(c) ** power + np.abs(s) ** power) ** (1 / power)
-    radius *= 1 + 0.16 * fluid * np.cos(3 * U - 2 * t)
-    radius += 0.07 * fluid * np.sin(5 * U + t)
-    center_z = 0.56 * fluid * np.sin(2 * U + t)
-    center_z += 0.10 * math.sin(t) * np.cos(3 * U - t)
-    twist = 1.10 * fluid * np.sin(3 * U - t) + 0.4 * math.sin(t)
-    tube_power = 2 + 6 * square
-    tube_radius = (np.abs(np.cos(V)) ** tube_power + np.abs(np.sin(V)) ** tube_power) ** (-1 / tube_power)
-    a, b = tube_radius * np.cos(V), tube_radius * np.sin(V)
-    width = 0.37 + 0.11 * fluid * np.cos(3 * U + t)
-    thickness = 0.26 + 0.12 * fluid
-    ripple = 1 + 0.055 * fluid * np.cos(8 * V + 3 * U)
-    radial = (width * a * np.cos(twist) - thickness * b * np.sin(twist)) * ripple
-    vertical = (width * a * np.sin(twist) + thickness * b * np.cos(twist)) * ripple
-    points = np.stack([
-        (radius + radial) * c,
-        (radius + radial) * s,
-        center_z + vertical,
-    ], axis=-1)
-    # Positive cylindrical radius and a simple tube section preserve the hole.
-    assert np.min(radius + radial) > 0.65
-    return points
+def animate(attr,values,dur):
+    count=len(values.split(';'))-1
+    return f'<animate attributeName="{attr}" values="{values}" dur="{dur}s" repeatCount="indefinite" calcMode="spline" keyTimes="'+ ';'.join(str(i/count) for i in range(count+1))+ '" keySplines="'+ ';'.join(['.45 0 .55 1']*count)+'"/>'
 
 
-def sculpture(phase):
-    t = phase * math.tau
-    points = surface(phase)
-    tangent_u = np.roll(points, -1, axis=0) - np.roll(points, 1, axis=0)
-    tangent_v = np.roll(points, -1, axis=1) - np.roll(points, 1, axis=1)
-    normals = np.cross(tangent_u, tangent_v)
-    normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
-    yaw, pitch, roll = 0.20 + 0.46 * math.sin(t), 0.38 + 0.20 * math.cos(t), 0.23 * math.sin(t)
-    cy, sy, cx, sx, cr, sr = (
-        math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch),
-        math.cos(roll), math.sin(roll),
-    )
-    rotation = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
-    rotation = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]]) @ rotation
-    rotation = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]]) @ rotation
-    world = points @ rotation.T
-    normals = normals @ rotation.T
-    # Orthographic projection keeps the opening legible during the entire loop.
-    col = np.rint((world[..., 0] / 7.40 + 0.5) * (COLS - 1)).astype(int)
-    row = np.rint((0.5 - world[..., 1] / 5.60) * (ROWS - 1)).astype(int)
-    assert col.min() > 0 and col.max() < COLS - 1
-    assert row.min() > 0 and row.max() < ROWS - 1
-    flat_cell = (row * COLS + col).ravel()
-    # Sort by cell, then depth; the last surface sample wins the z-buffer.
-    order = np.lexsort((world[..., 2].ravel(), flat_cell))
-    sorted_cells = flat_cell[order]
-    last = np.r_[sorted_cells[1:] != sorted_cells[:-1], True]
-    visible = order[last]
-    cells = flat_cell[visible]
-    normal = normals.reshape(-1, 3)[visible]
-    light = np.array([-0.45, 0.60, 0.80])
-    light /= np.linalg.norm(light)
-    diffuse = np.clip(normal @ light, 0, 1)
-    rim = (1 - np.abs(normal[:, 2])) ** 2
-    reflected = 2 * (normal @ light)[:, None] * normal - light
-    specular = np.clip(reflected[:, 2], 0, 1) ** 14
-    # Engraved material lines follow the moving surface, with polished highlights.
-    engraving = (0.5 + 0.5 * np.cos(22 * U + 4 * np.sin(3 * V))) ** 10
-    engraving = np.broadcast_to(engraving, points.shape[:2]).ravel()[visible]
-    shade = np.clip(0.12 + 0.60 * diffuse + 0.19 * rim + 0.38 * specular - 0.13 * engraving, 0, 0.999)
-    chars = np.full(ROWS * COLS, " ", dtype="<U1")
-    chars[cells] = RAMP[(shade * len(RAMP)).astype(int)]
-    return ["".join(row) for row in chars.reshape(ROWS, COLS)]
+def generate(theme):
+    fg = '#e6edf3' if theme == 'dark' else '#18212c'
+    background='#0d1117' if theme=='dark' else '#ffffff'
+    # One shaded relief mask shares a single displacement field across every
+    # face. This preserves depth alignment and avoids eight filter passes.
+    masks = f'''<clipPath id="front-shell"><path d="{OUTER} {MOUTH}" fill-rule="evenodd" clip-rule="evenodd"/></clipPath>
+<mask id="volume" maskUnits="userSpaceOnUse" x="0" y="0" width="900" height="660">
+<g filter="url(#warp)">
+<g transform="translate(42 38)"><path d="{OUTER}" fill="#404040"/><path d="{MOUTH}" fill="black"/></g>
+<path d="{OUTER}" fill="#b0b0b0"/>
+<g clip-path="url(#front-shell)"><path d="{TOP}" fill="white"/><path d="{LEFT}" fill="#d0d0d0"/><path d="{BOTTOM}" fill="#a0a0a0"/></g>
+<path d="{MOUTH}" fill="#353535"/>
+<path d="{CAVE_LEFT}" fill="#666666"/><path d="{CAVE_BOTTOM}" fill="#888888"/>
+<path d="{DEEP}" fill="black"/>
+</g></mask>'''
+    rows=[]
+    ramp='.,:;-=+*#%@'
+    for y in range(60):
+        chars=[]
+        for x in range(126):
+            f=.5+.19*math.sin(x*.16+y*.08)+.12*math.sin(x*.41-y*.33)+.10*math.sin(x*.91+y*1.2)
+            chars.append(ramp[min(9,max(0,int(f*10)))])
+        rows.append(f'<tspan x="34" y="{40+y*10}" textLength="832" lengthAdjust="spacingAndGlyphs">'+''.join(chars)+'</tspan>')
+    plane='<text id="ascii" font-family="monospace" font-size="11" xml:space="preserve">'+''.join(rows)+'</text>'
+    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="900" height="660" viewBox="0 0 900 660">
+<defs>
+<filter id="warp" x="0" y="0" width="900" height="660" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency=".004 .006" numOctaves="2" seed="37" result="continental">{animate('baseFrequency','.004 .006;.008 .004;.003 .009;.004 .006',11.313)}</feTurbulence>
+<feTurbulence type="fractalNoise" baseFrequency=".012 .011" numOctaves="1" seed="83" result="erosion">{animate('baseFrequency','.012 .011;.005 .015;.010 .006;.012 .011',17.321)}</feTurbulence>
+<feComposite in="continental" in2="erosion" operator="arithmetic" k1="0" k2=".72" k3=".28" k4="0" result="field"/>
+<feDisplacementMap in="SourceGraphic" in2="field" scale="220" xChannelSelector="R" yChannelSelector="G">{animate('scale','220;110;360;220',23.719)}</feDisplacementMap>
+</filter>
+<filter id="grain" x="0" y="0" width="900" height="660" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency=".025 .04" numOctaves="2" seed="16" result="noise">{animate('baseFrequency','.025 .04;.038 .022;.025 .04',31.173)}</feTurbulence>
+<feColorMatrix in="noise" type="saturate" values="0"/>
+<feComponentTransfer result="grain"><feFuncR type="linear" slope=".8" intercept=".25"/><feFuncG type="linear" slope=".8" intercept=".25"/><feFuncB type="linear" slope=".8" intercept=".25"/><feFuncA type="linear" slope="0" intercept="1"/></feComponentTransfer>
+<feComposite in="SourceGraphic" in2="grain" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>
+</filter>
+<linearGradient id="light" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{fg}" stop-opacity=".95"/><stop offset=".45" stop-color="{fg}" stop-opacity=".75"/><stop offset="1" stop-color="{fg}" stop-opacity=".3"/></linearGradient>
+{plane}
+{masks}
+</defs>
+<rect width="900" height="660" fill="{background}"/>
+<g>
+<animateTransform attributeName="transform" type="rotate" values="-8 450 330;7 450 330;-4 450 330;-8 450 330" dur="35.411s" repeatCount="indefinite"/>
+<use xlink:href="#ascii" fill="url(#light)" filter="url(#grain)" mask="url(#volume)"/>
+</g>
+</svg>'''
+    p=ROOT/f'hollow-stone-{theme}.svg'
+    p.write_text(svg)
+    print(p.name,len(svg))
 
-
-@lru_cache(maxsize=2)
-def glyph_tiles(font):
-    atlas = np.zeros((128, CELL_HEIGHT, CELL_WIDTH), dtype=np.uint8)
-    for char in " " + "".join(RAMP):
-        tile = Image.new("L", (CELL_WIDTH, CELL_HEIGHT))
-        ImageDraw.Draw(tile).text((0, -3), char, font=font, fill=255)
-        atlas[ord(char)] = np.asarray(tile)
-    return atlas
-
-
-def palette_for(theme):
-    background, foreground = THEMES[theme]
-    return [
-        round(a + (b - a) * index / 255)
-        for index in range(256)
-        for a, b in zip(background, foreground)
-    ]
-
-
-def raster(lines, font):
-    codes = np.frombuffer("".join(lines).encode("ascii"), dtype=np.uint8).reshape(ROWS, COLS)
-    pixels = glyph_tiles(font)[codes].transpose(0, 2, 1, 3)
-    pixels = pixels.reshape(ROWS * CELL_HEIGHT, COLS * CELL_WIDTH)
-    canvas = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
-    x = (WIDTH - pixels.shape[1]) // 2
-    y = (HEIGHT - pixels.shape[0]) // 2
-    canvas[y:y + pixels.shape[0], x:x + pixels.shape[1]] = pixels
-    return Image.fromarray(canvas).convert("P")
-
-
-def render(lines, theme, font):
-    image = raster(lines, font)
-    image.putpalette(palette_for(theme))
-    return image.convert("RGB")
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--font", default="/usr/share/fonts/noto/NotoSansMono-Regular.ttf")
-    args = parser.parse_args()
-    if not Path(args.font).is_file():
-        parser.error("Choose an installed monospace TrueType font with --font.")
-    font = ImageFont.truetype(args.font, 11)
-    text_frames = []
-    for index in range(FRAMES):
-        text_frames.append(sculpture(index / FRAMES))
-        if index % 45 == 0:
-            print(f"Geometry: {index}/{FRAMES}", flush=True)
-    raster_frames = [raster(lines, font) for lines in text_frames]
-    for theme in THEMES:
-        frames = [frame.copy() for frame in raster_frames]
-        for frame in frames:
-            frame.putpalette(palette_for(theme))
-        target = ROOT / f"hollow-stone-{theme}.gif"
-        frames[0].save(
-            target, save_all=True, append_images=frames[1:],
-            duration=DURATION, loop=0, disposal=1, optimize=True,
-        )
-        print(f"{target.name}: {target.stat().st_size / 1024:.0f} KiB / {FRAMES * DURATION / 1000:.1f}s", flush=True)
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    for theme in ('dark', 'light'):
+        generate(theme)
